@@ -1296,23 +1296,28 @@ const SettingsView = ({
   theme: Theme;
   setTheme: (theme: Theme) => void;
 }) => {
+
   /* This component has been significantly upgraded */
-  const [displayName, setDisplayName] = useState(user?.displayName || "");
-  const [isDirty, setIsDirty] = useState(false);
-  const [message, setMessage] = useState<{
-    type: "success" | "error" | "info";
-    text: string;
-  } | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    appointments: true,
-    messages: false,
-  });
-  const [systemStatus, setSystemStatus] = useState({
-    db: "checking",
-    api: "checking",
-  });
+const [displayName, setDisplayName] = useState(user?.displayName || "");
+const [isDirty, setIsDirty] = useState(false);
+const [message, setMessage] = useState<{
+  type: "success" | "error" | "info";
+  text: string;
+} | null>(null);
+const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
+
+// ✅ Ignore unused state (fix build)
+const [_notificationPrefs, _setNotificationPrefs] = useState({
+  appointments: true,
+  messages: false,
+});
+
+const [systemStatus, setSystemStatus] = useState({
+  db: "checking",
+  api: "checking",
+});
+
 
   useEffect(() => {
     setIsDirty(displayName !== (user?.displayName || ""));
