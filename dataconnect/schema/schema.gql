@@ -1,0 +1,46 @@
+type Admin @table {
+  username: String!
+  passwordHash: String!
+  createdAt: Timestamp!
+  email: String
+  displayName: String
+}
+
+type Client @table {
+  firstName: String!
+  lastName: String!
+  dateOfBirth: Date!
+  createdAt: Timestamp!
+  email: String
+  phone: String
+  address: String
+  notes: String
+}
+
+type Service @table {
+  name: String!
+  durationMinutes: Int!
+  price: Float!
+  createdAt: Timestamp!
+  description: String
+}
+
+type Appointment @table {
+  appointmentDateTime: Timestamp!
+  status: String!
+  createdAt: Timestamp!
+  notes: String
+  client: Client
+  service: Service
+}
+
+type Payment @table {
+  amount: Float!
+  paymentDate: Timestamp!
+  paymentMethod: String!
+  createdAt: Timestamp!
+  notes: String
+  referenceNumber: String
+  client: Client
+  appointment: Appointment
+}

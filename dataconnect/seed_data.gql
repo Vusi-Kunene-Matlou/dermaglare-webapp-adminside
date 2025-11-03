@@ -1,0 +1,40 @@
+mutation SeedDatabase @transaction @auth(level: NO_ACCESS) {
+  client_insertMany(data: [
+    {
+      firstName: "John",
+      lastName: "Doe",
+      email: "john.doe@example.com",
+      phone: "123-456-7890",
+      dateOfBirth: "1990-01-01",
+      address: "123 Main St",
+      notes: "Example client"
+      createdAt: "2024-04-26T12:00:00Z"
+    },
+    {
+      firstName: "Jane",
+      lastName: "Smith",
+      email: "jane.smith@example.com",
+      phone: "987-654-3210",
+      dateOfBirth: "1985-05-10",
+      address: "456 Elm St",
+      notes: "Example client"
+      createdAt: "2024-04-26T13:00:00Z"
+    }
+  ])
+  service_insertMany(data: [
+    {
+      name: "Haircut",
+      description: "A basic haircut",
+      durationMinutes: 30,
+      price: 25.00,
+      createdAt: "2024-04-26T12:00:00Z"
+    },
+    {
+      name: "Facial",
+      description: "A relaxing facial",
+      durationMinutes: 60,
+      price: 60.00,
+      createdAt: "2024-04-26T13:00:00Z"
+    }
+  ])
+}

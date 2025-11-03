@@ -1,0 +1,33 @@
+mutation AddNewClient(
+  $firstName: String!
+  $lastName: String!
+  $dateOfBirth: Date!
+) @auth(level: USER) {
+  client_insert(
+    data: { firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, createdAt_expr: "request.time" }
+  )
+}
+
+query ListServices @auth(level: PUBLIC) {
+  services {
+    id
+    name
+    description
+    price
+    durationMinutes
+  }
+}
+
+mutation UpdateAppointmentNotes($id: UUID!, $notes: String) @auth(level: USER) {
+  appointment_update(key: { id: $id }, data: { notes: $notes })
+}
+
+query ListClients @auth(level: USER) {
+  clients {
+    id
+    firstName
+    lastName
+    email
+    phone
+  }
+}
