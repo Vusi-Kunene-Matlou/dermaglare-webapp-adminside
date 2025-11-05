@@ -9,13 +9,13 @@ import { getAuth } from "firebase/auth";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyBWw_FjAs09WYaP-dIeNUE6SNaDOXgY_Tk",
-  authDomain: "dermaglare-web-app.firebaseapp.com",
-  projectId: "dermaglare-web-app",
-  storageBucket: "dermaglare-web-app.firebasestorage.app",
-  messagingSenderId: "67529503663",
-  appId: "1:67529503663:web:f5080744b553ac9ff0b55a",
-  measurementId: "G-QRJFW9XB4Q"
+  apiKey: "AIzaSyBHyhsDtZABqCEgmPdVHsA8r4vqTQIBJSs",
+  authDomain: "dermaglareapp.firebaseapp.com",
+  projectId: "dermaglareapp",
+  storageBucket: "dermaglareapp.firebasestorage.app",
+  messagingSenderId: "462818904186",
+  appId: "1:462818904186:web:2040dcd437664d563bd3c3",
+  measurementId: "G-3XLGD4G27R"
 };
 
 // Initialize Firebase

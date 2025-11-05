@@ -6,7 +6,7 @@
 // as well as the initial registration for Chart.js.
 // =================================================================================================
 
-import React, { useState, useEffect, useMemo } from "react"; // Added useMemo for performance
+import React, { useState, useEffect, useMemo } from "react";
 import { db, auth } from "./firebase";
 import {
   collection,
@@ -18,6 +18,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  where,
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import {
@@ -53,59 +54,81 @@ ChartJS.register(
 
 // =================================================================================================
 // --- 2. TYPE DEFINITIONS & UTILITY FUNCTIONS ---
-// This section defines the TypeScript interfaces for our data structures and includes helper functions.
+// Updated to match your Firebase structure
 // =================================================================================================
 
 type Theme = "light" | "dark";
+
 interface Page {
   name:
     | "Dashboard"
-    | "Patient Profiles"
+    | "User Management"
     | "Appointment Management"
-    | "Documents"
     | "Chat Management"
-    | "Invoice Viewer"
+    | "Schedule Management"
+    | "Services"
+    | "Chatbot Knowledge"
     | "Settings";
   icon: string;
 }
-interface Patient {
+
+// Updated to match your Firebase 'users' collection
+interface AppUser {
   id: string;
-  name: string;
-  dob: string;
-  lastVisit: string;
-  vitals: { bloodPressure: string; pulse: number; weightKg: number };
-}
-interface Appointment {
-  id: string;
-  patientName: string;
-  time: string;
-  date: string;
-  type: "Consultation" | "Treatment" | "Follow-up";
-  status: "Confirmed" | "Completed" | "Cancelled" | "Pending";
-}
-interface Document {
-  id: string;
-  name: string;
-  type: "PDF" | "Image" | "Lab Report";
-  date: string;
-  patientId: string;
-}
-interface Invoice {
-  id: string;
-  patientName: string;
-  date: string;
-  amount: number;
-  status: "Paid" | "Pending" | "Overdue";
+  displayName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  createdAt: any;
 }
 
-// Add these two missing interfaces
+// Updated to match your Firebase 'appointments' collection
+interface Appointment {
+  id: string;
+  userId: string;
+  userName?: string;
+  date: string;
+  time: string;
+  status: "Pending" | "Confirmed" | "Completed" | "Cancelled";
+  serviceType?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
+// For schedule management
+interface Schedule {
+  id: string;
+  date: string;
+  availableSlots: string[];
+  bookedSlots: string[];
+}
+
+// For services
+interface Service {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
+}
+
+// For chatbot knowledge
+interface ChatbotKnowledge {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+}
+
 interface ChatThread {
   id: string;
   patientName: string;
+  patientId: string;
   lastMessageText: string;
   lastMessageTimestamp: { seconds: number };
   unreadByAdmin: boolean;
 }
+
 interface ChatMessage {
   id: string;
   text: string;
@@ -118,7 +141,6 @@ const getStatusClasses = (status: string, theme: Theme) => {
   switch (status) {
     case "Confirmed":
     case "Completed":
-    case "Paid":
       return isDark
         ? "bg-green-500/20 text-green-400 ring-1 ring-inset ring-green-500/30"
         : "bg-green-100 text-green-800 ring-1 ring-inset ring-green-200";
@@ -127,7 +149,6 @@ const getStatusClasses = (status: string, theme: Theme) => {
         ? "bg-yellow-500/20 text-yellow-400 ring-1 ring-inset ring-yellow-500/30"
         : "bg-yellow-100 text-yellow-800 ring-1 ring-inset ring-yellow-200";
     case "Cancelled":
-    case "Overdue":
       return isDark
         ? "bg-red-500/20 text-red-400 ring-1 ring-inset ring-red-500/30"
         : "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200";
@@ -140,11 +161,10 @@ const getStatusClasses = (status: string, theme: Theme) => {
 
 // =================================================================================================
 // --- 3. STANDALONE UI COMPONENTS (PRELOADER & LOGIN) ---
-// These components are used outside the main dashboard layout, primarily for the auth flow.
 // =================================================================================================
 
 const CreativePreloader: React.FC = () => {
-  /* This component remains unchanged */ const containerVariants: Variants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -229,7 +249,7 @@ const CreativePreloader: React.FC = () => {
         </motion.div>
         <motion.div variants={textVariants}>
           <h1 className="text-4xl font-bold text-brand-yellow mt-8 tracking-wider">
-            Admin Portal
+            Dermaglare Admin Portal
           </h1>
           <p className="text-white/70">Initializing Services...</p>
         </motion.div>
@@ -237,13 +257,14 @@ const CreativePreloader: React.FC = () => {
     </div>
   );
 };
+
 const LoginPage: React.FC<{
   handleLogin: (e: React.FormEvent<HTMLFormElement>) => void;
   setEmail: (email: string) => void;
   setPassword: (password: string) => void;
   loginError: string;
 }> = ({ handleLogin, setEmail, setPassword, loginError }) => {
-  /* This component's code is unchanged */ return (
+  return (
     <div className="flex items-center justify-center min-h-screen bg-gray-900">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -252,9 +273,11 @@ const LoginPage: React.FC<{
         className="flex w-full max-w-4xl h-[550px] overflow-hidden bg-gray-800 rounded-2xl shadow-2xl border border-white/10"
       >
         <div className="hidden md:block md:w-1/2 bg-brand-teal p-12 text-white flex flex-col justify-center items-center text-center">
-          <h2 className="text-4xl font-bold text-brand-yellow">Admin Portal</h2>
+          <h2 className="text-4xl font-bold text-brand-yellow">
+            Dermaglare Admin
+          </h2>
           <p className="mt-4 opacity-80 max-w-xs">
-            Manage appointments, patient profiles, and invoices with ease.
+            Manage appointments, patients, and clinic operations with ease.
           </p>
         </div>
         <div className="w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center">
@@ -293,24 +316,21 @@ const LoginPage: React.FC<{
 
 // =================================================================================================
 // --- 4. VIEW COMPONENTS (EACH PAGE OF THE DASHBOARD) ---
-// Each component here represents a distinct page within the authenticated part of the application.
 // =================================================================================================
 
 // --- 4.1 DASHBOARD VIEW ---
 const DashboardView = ({
   appointments,
-  patients,
-  invoices,
+  users,
   theme,
 }: {
   appointments: Appointment[];
-  patients: Patient[];
-  invoices: Invoice[];
+  users: AppUser[];
   theme: Theme;
 }) => {
-  /* This component is now theme-aware */ const [chartView, setChartView] =
-    useState<"upcoming" | "past">("upcoming");
+  const [chartView, setChartView] = useState<"upcoming" | "past">("upcoming");
   const isDark = theme === "dark";
+
   const chartOptions = {
     maintainAspectRatio: false,
     plugins: { legend: { labels: { color: isDark ? "#e5e7eb" : "#374151" } } },
@@ -329,6 +349,7 @@ const DashboardView = ({
       },
     },
   };
+
   const appointmentChartData = {
     labels:
       chartView === "upcoming"
@@ -376,30 +397,34 @@ const DashboardView = ({
       },
     ],
   };
-  const invoiceStatusCounts = {
-    Paid: invoices.filter((i) => i.status === "Paid").length,
-    Pending: invoices.filter((i) => i.status === "Pending").length,
-    Overdue: invoices.filter((i) => i.status === "Overdue").length,
+
+  const statusCounts = {
+    Confirmed: appointments.filter((a) => a.status === "Confirmed").length,
+    Pending: appointments.filter((a) => a.status === "Pending").length,
+    Completed: appointments.filter((a) => a.status === "Completed").length,
+    Cancelled: appointments.filter((a) => a.status === "Cancelled").length,
   };
-  const invoiceChartData = {
-    labels: ["Paid", "Pending", "Overdue"],
+
+  const statusChartData = {
+    labels: ["Confirmed", "Pending", "Completed", "Cancelled"],
     datasets: [
       {
         data: [
-          invoiceStatusCounts.Paid,
-          invoiceStatusCounts.Pending,
-          invoiceStatusCounts.Overdue,
+          statusCounts.Confirmed,
+          statusCounts.Pending,
+          statusCounts.Completed,
+          statusCounts.Cancelled,
         ],
-        backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"],
+        backgroundColor: ["#22c55e", "#f59e0b", "#3b82f6", "#ef4444"],
         borderColor: isDark ? "#1f2937" : "#fff",
       },
     ],
   };
+
   const todayAppointments = appointments.filter(
-    (a) =>
-      a.date === new Date().toISOString().split("T")[0] &&
-      a.status === "Confirmed"
+    (a) => a.date === new Date().toISOString().split("T")[0]
   );
+
   const cardClasses = isDark
     ? "bg-white/5 border-white/10"
     : "bg-white shadow-md border border-gray-200";
@@ -408,6 +433,7 @@ const DashboardView = ({
   const scheduleRow = isDark
     ? "bg-gray-700/50"
     : "bg-gray-50 border border-gray-200";
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -420,28 +446,29 @@ const DashboardView = ({
           </p>
         </div>
         <div className={`p-6 rounded-xl ${cardClasses}`}>
-          <h3 className={`text-sm font-medium ${textMuted}`}>Total Patients</h3>
+          <h3 className={`text-sm font-medium ${textMuted}`}>Total Users</h3>
           <p className={`mt-2 text-3xl font-bold ${textHeader}`}>
-            {patients.length}
+            {users.length}
           </p>
         </div>
         <div className={`p-6 rounded-xl ${cardClasses}`}>
           <h3 className={`text-sm font-medium ${textMuted}`}>
-            Pending Invoices
+            Pending Appointments
           </h3>
           <p className="mt-2 text-3xl font-bold text-yellow-400">
-            {invoiceStatusCounts.Pending}
+            {statusCounts.Pending}
           </p>
         </div>
         <div className={`p-6 rounded-xl ${cardClasses}`}>
           <h3 className={`text-sm font-medium ${textMuted}`}>
-            Overdue Invoices
+            Active Patients
           </h3>
-          <p className="mt-2 text-3xl font-bold text-red-500">
-            {invoiceStatusCounts.Overdue}
+          <p className="mt-2 text-3xl font-bold text-green-500">
+            {users.filter((u) => u.isActive).length}
           </p>
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className={`lg:col-span-2 p-6 rounded-xl ${cardClasses}`}>
           <div className="flex justify-between items-center mb-4">
@@ -487,11 +514,11 @@ const DashboardView = ({
           className={`p-6 rounded-xl flex flex-col items-center ${cardClasses}`}
         >
           <h3 className={`text-lg font-semibold mb-4 ${textHeader}`}>
-            Invoice Status
+            Appointment Status
           </h3>
           <div className="h-[300px] w-full">
             <Doughnut
-              data={invoiceChartData}
+              data={statusChartData}
               options={{
                 maintainAspectRatio: false,
                 plugins: {
@@ -502,6 +529,7 @@ const DashboardView = ({
           </div>
         </div>
       </div>
+
       <div className={`p-6 rounded-xl ${cardClasses}`}>
         <h3 className={`text-xl font-bold mb-4 ${textHeader}`}>
           Today's Schedule
@@ -518,9 +546,11 @@ const DashboardView = ({
                     isDark ? "text-gray-200" : "text-gray-700"
                   }`}
                 >
-                  {app.time} - {app.patientName}
+                  {app.time} - {app.userName || "Patient"}
                 </p>
-                <p className={`text-sm ${textMuted}`}>{app.type}</p>
+                <p className={`text-sm ${textMuted}`}>
+                  {app.serviceType || "Consultation"}
+                </p>
               </div>
               <span
                 className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusClasses(
@@ -534,7 +564,7 @@ const DashboardView = ({
           ))
         ) : (
           <p className={`${textMuted} italic`}>
-            No confirmed appointments for today.
+            No appointments for today.
           </p>
         )}
       </div>
@@ -542,69 +572,67 @@ const DashboardView = ({
   );
 };
 
-// --- 4.2 PATIENT PROFILES VIEW ---
-const PatientProfilesView = ({
-  patients,
+// --- 4.2 USER MANAGEMENT VIEW ---
+const UserManagementView = ({
+  users,
   theme,
 }: {
-  patients: Patient[];
+  users: AppUser[];
   theme: Theme;
 }) => {
-  /* This component is now theme-aware */ const isDark = theme === "dark";
+  const isDark = theme === "dark";
   const cardClasses = isDark
     ? "bg-white/5 border-white/10"
     : "bg-white shadow-md border border-gray-200";
   const headingClasses = isDark ? "text-brand-yellow" : "text-brand-gold";
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {patients.map((patient) => (
+      {users.map((user) => (
         <div
-          key={patient.id}
+          key={user.id}
           className={`${cardClasses} p-6 rounded-xl transition-transform hover:-translate-y-1`}
         >
-          <h3 className={`text-xl font-bold mb-2 ${headingClasses}`}>
-            {patient.name}
-          </h3>
-          <p className={isDark ? "text-gray-300" : "text-gray-600"}>
-            DOB: {patient.dob}
-          </p>
-          <p className={isDark ? "text-gray-300" : "text-gray-600"}>
-            Last Visit: {patient.lastVisit}
-          </p>
-          <div
-            className={`mt-4 pt-4 ${
-              isDark ? "border-t border-gray-700" : "border-t border-gray-200"
-            }`}
-          >
-            <h4
-              className={`font-semibold ${
-                isDark ? "text-gray-200" : "text-gray-700"
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={`text-xl font-bold ${headingClasses}`}>
+              {user.displayName}
+            </h3>
+            <span
+              className={`px-2 py-1 text-xs rounded-full ${
+                user.isActive
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-red-500/20 text-red-400"
               }`}
             >
-              Vitals
-            </h4>
-            <ul
-              className={`text-sm list-disc list-inside ${
-                isDark ? "text-gray-400" : "text-gray-500"
-              }`}
-            >
-              <li>BP: {patient.vitals.bloodPressure}</li>
-              <li>Pulse: {patient.vitals.pulse} bpm</li>
-              <li>Weight: {patient.vitals.weightKg} kg</li>
-            </ul>
+              {user.isActive ? "Active" : "Inactive"}
+            </span>
           </div>
+          <p className={isDark ? "text-gray-300" : "text-gray-600"}>
+            Email: {user.email}
+          </p>
+          <p className={isDark ? "text-gray-300" : "text-gray-600"}>
+            Role: {user.role}
+          </p>
+          <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+            Joined:{" "}
+            {user.createdAt?.toDate
+              ? user.createdAt.toDate().toLocaleDateString()
+              : "N/A"}
+          </p>
         </div>
       ))}
     </div>
   );
 };
 
-// --- 4.3 APPOINTMENT MANAGEMENT VIEW  ---
+// --- 4.3 APPOINTMENT MANAGEMENT VIEW ---
 const AppointmentManagementView = ({
   appointments,
+  users,
   theme,
 }: {
   appointments: Appointment[];
+  users: AppUser[];
   theme: Theme;
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -618,10 +646,12 @@ const AppointmentManagementView = ({
       if (!map.has(dateKey)) {
         map.set(dateKey, []);
       }
-      map.get(dateKey)?.push(app);
+      // Enrich appointment with user name
+      const user = users.find((u) => u.id === app.userId);
+      map.get(dateKey)?.push({ ...app, userName: user?.displayName || "Unknown" });
     });
     return map;
-  }, [appointments]);
+  }, [appointments, users]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -834,15 +864,23 @@ const AppointmentManagementView = ({
                     }`}
                   >
                     <p className="font-semibold">
-                      {app.time} - {app.patientName}
+                      {app.time} - {app.userName}
                     </p>
                     <p
                       className={`text-sm ${
                         isDark ? "text-gray-400" : "text-gray-500"
                       }`}
                     >
-                      {app.type}
+                      {app.serviceType || "Consultation"}
                     </p>
+                    <span
+                      className={`inline-block mt-1 px-2 py-1 text-xs rounded-full ${getStatusClasses(
+                        app.status,
+                        theme
+                      )}`}
+                    >
+                      {app.status}
+                    </span>
                   </motion.div>
                 ))
               ) : (
@@ -854,129 +892,16 @@ const AppointmentManagementView = ({
           </div>
         </div>
       ) : (
-        <AllAppointmentsList appointments={appointments} theme={theme} />
+        <AllAppointmentsList appointments={appointments.map(app => {
+          const user = users.find(u => u.id === app.userId);
+          return { ...app, userName: user?.displayName || "Unknown" };
+        })} theme={theme} />
       )}
     </div>
   );
 };
 
-// --- 4.4 DOCUMENTS VIEW ---
-const DocumentsView = ({
-  documents,
-  patients,
-  theme,
-}: {
-  documents: Document[];
-  patients: Patient[];
-  theme: Theme;
-}) => {
-  const isDark = theme === "dark";
-  const cardClasses = isDark
-    ? "bg-white/5 border-white/10"
-    : "bg-white shadow-md border border-gray-200";
-  const rowClasses = isDark
-    ? "bg-gray-700/50"
-    : "bg-gray-100 border border-gray-200";
-  const textClasses = isDark ? "text-gray-200" : "text-gray-800";
-  const subtextClasses = isDark ? "text-gray-400" : "text-gray-500";
-  const linkClasses = isDark ? "text-brand-yellow" : "text-brand-gold";
-
-  return (
-    <div className={`p-6 rounded-xl ${cardClasses}`}>
-      {documents.map((doc) => {
-        const patient = patients.find((p) => p.id === doc.patientId);
-        return (
-          <div
-            key={doc.id}
-            className={`flex justify-between items-center p-3 my-2 rounded-lg ${rowClasses}`}
-          >
-            <div>
-              <p className={`font-semibold ${textClasses}`}>{doc.name}</p>
-              <p className={`text-sm ${subtextClasses}`}>
-                Patient: {patient?.name || "Unknown"} | Date: {doc.date}
-              </p>
-            </div>
-            <a
-              href="#"
-              className={`text-sm font-medium hover:underline ${linkClasses}`}
-            >
-              Download
-            </a>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-// --- 4.5 INVOICE VIEWER ---
-const InvoiceView = ({
-  invoices,
-  theme,
-}: {
-  invoices: Invoice[];
-  theme: Theme;
-}) => {
-  const isDark = theme === "dark";
-  const cardClasses = isDark
-    ? "bg-white/5 border-white/10"
-    : "bg-white shadow-md border border-gray-200";
-  const headerClasses = isDark ? "bg-gray-700/50" : "bg-gray-50";
-  const textClasses = isDark ? "text-gray-300" : "text-gray-700";
-  const headerTextClasses = isDark ? "text-gray-300" : "text-gray-500";
-  const rowHoverClasses = isDark ? "hover:bg-gray-700/50" : "hover:bg-gray-50";
-  const divideClasses = isDark ? "divide-gray-800" : "divide-gray-200";
-
-  return (
-    <div className={`p-6 rounded-xl overflow-x-auto ${cardClasses}`}>
-      <table className={`min-w-full divide-y ${divideClasses}`}>
-        <thead className={headerClasses}>
-          <tr>
-            <th
-              className={`px-6 py-3 text-left text-xs font-medium uppercase ${headerTextClasses}`}
-            >
-              Patient
-            </th>
-            <th
-              className={`px-6 py-3 text-left text-xs font-medium uppercase ${headerTextClasses}`}
-            >
-              Amount
-            </th>
-            <th
-              className={`px-6 py-3 text-left text-xs font-medium uppercase ${headerTextClasses}`}
-            >
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody className={`divide-y ${divideClasses}`}>
-          {invoices.map((invoice) => (
-            <tr key={invoice.id} className={rowHoverClasses}>
-              <td className={`px-6 py-4 whitespace-nowrap ${textClasses}`}>
-                {invoice.patientName}
-              </td>
-              <td className={`px-6 py-4 whitespace-nowrap ${textClasses}`}>
-                R {invoice.amount.toFixed(2)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span
-                  className={`px-2 py-1 text-xs rounded-full ${getStatusClasses(
-                    invoice.status,
-                    theme
-                  )}`}
-                >
-                  {invoice.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-// --- 4.6.1 SUB-COMPONENT FOR APPOINTMENT LIST VIEW ---
+// --- 4.3.1 SUB-COMPONENT FOR APPOINTMENT LIST VIEW ---
 const AllAppointmentsList = ({
   appointments,
   theme,
@@ -1027,7 +952,7 @@ const AllAppointmentsList = ({
       <table className="min-w-full divide-y divide-gray-700">
         <thead className={headerClasses}>
           <tr>
-            {["date", "time", "patientName", "status"].map((key) => (
+            {["date", "time", "userName", "status"].map((key) => (
               <th
                 key={key}
                 className="px-6 py-3 text-left text-xs font-medium uppercase cursor-pointer"
@@ -1057,7 +982,7 @@ const AllAppointmentsList = ({
             >
               <td className="px-6 py-4 whitespace-nowrap">{app.date}</td>
               <td className="px-6 py-4 whitespace-nowrap">{app.time}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{app.patientName}</td>
+              <td className="px-6 py-4 whitespace-nowrap">{app.userName}</td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span
                   className={`px-2 py-1 text-xs rounded-full ${getStatusClasses(
@@ -1076,7 +1001,7 @@ const AllAppointmentsList = ({
   );
 };
 
-// --- 4.7 CHAT MANAGEMENT VIEW (NEW) ---
+// --- 4.4 CHAT MANAGEMENT VIEW ---
 const ChatManagementView = ({
   theme,
   user,
@@ -1091,7 +1016,6 @@ const ChatManagementView = ({
   const [isLoadingThreads, setIsLoadingThreads] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  // Fetch all chat threads on component mount
   useEffect(() => {
     const q = query(
       collection(db, "chats"),
@@ -1107,7 +1031,6 @@ const ChatManagementView = ({
     return () => unsubscribe();
   }, []);
 
-  // Fetch messages for the selected thread whenever it changes
   useEffect(() => {
     if (!selectedThreadId) {
       setMessages([]);
@@ -1128,18 +1051,16 @@ const ChatManagementView = ({
     return () => unsubscribe();
   }, [selectedThreadId]);
 
-  // Handle sending a new message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim() === "" || !selectedThreadId || !user) return;
 
     const messageData = {
       text: newMessage,
-      senderId: "admin", // Or use user.uid if admin has a specific UID
+      senderId: "admin",
       timestamp: serverTimestamp(),
     };
 
-    // Add the new message to the subcollection
     const messagesColRef = collection(
       db,
       "chats",
@@ -1148,7 +1069,6 @@ const ChatManagementView = ({
     );
     await addDoc(messagesColRef, messageData);
 
-    // Update the last message on the parent chat thread document
     const chatDocRef = doc(db, "chats", selectedThreadId);
     await updateDoc(chatDocRef, {
       lastMessageText: newMessage,
@@ -1170,7 +1090,6 @@ const ChatManagementView = ({
 
   return (
     <div className={`rounded-xl flex h-[75vh] ${cardClasses}`}>
-      {/* Left Panel: Conversation List */}
       <div
         className={`w-1/3 border-r ${
           isDark ? "border-white/10" : "border-gray-200"
@@ -1178,7 +1097,7 @@ const ChatManagementView = ({
       >
         <div className="p-4 border-b border-inherit">
           <h2 className={`text-xl font-bold ${headingClasses}`}>
-            Conversations
+            Patient Chats
           </h2>
         </div>
         <div className="overflow-y-auto">
@@ -1212,7 +1131,6 @@ const ChatManagementView = ({
         </div>
       </div>
 
-      {/* Right Panel: Message View */}
       <div className="w-2/3 flex flex-col">
         {selectedThreadId ? (
           <>
@@ -1286,7 +1204,7 @@ const ChatManagementView = ({
   );
 };
 
-// --- 4.8 SETTINGS VIEW (HIGHLY UPGRADED) ---
+// --- 4.5 SETTINGS VIEW ---
 const SettingsView = ({
   user,
   theme,
@@ -1296,28 +1214,19 @@ const SettingsView = ({
   theme: Theme;
   setTheme: (theme: Theme) => void;
 }) => {
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [isDirty, setIsDirty] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
 
-  /* This component has been significantly upgraded */
-const [displayName, setDisplayName] = useState(user?.displayName || "");
-const [isDirty, setIsDirty] = useState(false);
-const [message, setMessage] = useState<{
-  type: "success" | "error" | "info";
-  text: string;
-} | null>(null);
-const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
-
-// ✅ Ignore unused state (fix build)
-const [_notificationPrefs, _setNotificationPrefs] = useState({
-  appointments: true,
-  messages: false,
-});
-
-const [systemStatus, setSystemStatus] = useState({
-  db: "checking",
-  api: "checking",
-});
-
+  const [systemStatus, setSystemStatus] = useState({
+    db: "checking",
+    api: "checking",
+  });
 
   useEffect(() => {
     setIsDirty(displayName !== (user?.displayName || ""));
@@ -1643,11 +1552,9 @@ const [systemStatus, setSystemStatus] = useState({
 
 // =================================================================================================
 // --- 5. CORE ADMIN DASHBOARD COMPONENT ---
-// This is the main component that orchestrates state, authentication, and page rendering.
 // =================================================================================================
 
 const AdminDashboard: React.FC = () => {
-  // --- 5.1 STATE MANAGEMENT (NOW INCLUDES THEME) ---
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("theme") as Theme) || "dark"
   );
@@ -1658,13 +1565,12 @@ const AdminDashboard: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [patients, setPatients] = useState<Patient[]>([]);
+  
+  // Updated state to match Firebase collections
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
-  // --- 5.2 EFFECTS (LIFECYCLE) ---
   useEffect(() => {
     localStorage.setItem("theme", theme);
     if (theme === "dark") {
@@ -1673,10 +1579,12 @@ const AdminDashboard: React.FC = () => {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
   useEffect(() => {
     const timer = setTimeout(() => setIsAppReady(true), 3000);
     return () => clearTimeout(timer);
   }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -1684,25 +1592,26 @@ const AdminDashboard: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
       setIsLoadingData(true);
       try {
-        const fetchCollection = async <T,>(name: string): Promise<T[]> =>
-          (await getDocs(collection(db, name))).docs.map(
-            (doc) => ({ id: doc.id, ...doc.data() } as T)
-          );
-        const [p, a, d, i] = await Promise.all([
-          fetchCollection<Patient>("patients"),
-          fetchCollection<Appointment>("appointments"),
-          fetchCollection<Document>("documents"),
-          fetchCollection<Invoice>("invoices"),
-        ]);
-        setPatients(p);
-        setAppointments(a);
-        setDocuments(d);
-        setInvoices(i);
+        // Fetch users collection
+        const usersSnapshot = await getDocs(collection(db, "users"));
+        const usersData = usersSnapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as AppUser)
+        );
+        setUsers(usersData);
+
+        // Fetch appointments collection
+        const appointmentsSnapshot = await getDocs(collection(db, "appointments"));
+        const appointmentsData = appointmentsSnapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as Appointment)
+        );
+        setAppointments(appointmentsData);
+
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -1712,7 +1621,6 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // --- 5.3 HANDLER FUNCTIONS ---
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoginError("");
@@ -1726,15 +1634,15 @@ const AdminDashboard: React.FC = () => {
       );
     }
   };
+
   const handleLogout = async () => {
     await signOut(auth);
   };
 
-  // --- 5.4 PAGE & NAVIGATION DATA ---
   const pages: Page[] = [
     { name: "Dashboard", icon: "M3 10h18M3 6h18M3 14h18M3 18h18" },
     {
-      name: "Patient Profiles",
+      name: "User Management",
       icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
     },
     {
@@ -1742,16 +1650,8 @@ const AdminDashboard: React.FC = () => {
       icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
     },
     {
-      name: "Documents",
-      icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    },
-    {
       name: "Chat Management",
       icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
-    },
-    {
-      name: "Invoice Viewer",
-      icon: "M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z",
     },
     {
       name: "Settings",
@@ -1759,7 +1659,6 @@ const AdminDashboard: React.FC = () => {
     },
   ];
 
-  // --- 5.5 RENDER LOGIC (PASSES THEME TO ALL COMPONENTS) ---
   const renderPage = () => {
     if (isLoadingData) {
       return (
@@ -1773,31 +1672,20 @@ const AdminDashboard: React.FC = () => {
         return (
           <DashboardView
             appointments={appointments}
-            patients={patients}
-            invoices={invoices}
+            users={users}
             theme={theme}
           />
         );
-      case "Patient Profiles":
-        return <PatientProfilesView patients={patients} theme={theme} />;
+      case "User Management":
+        return <UserManagementView users={users} theme={theme} />;
       case "Appointment Management":
         return (
           <AppointmentManagementView
             appointments={appointments}
+            users={users}
             theme={theme}
           />
         );
-      case "Documents":
-        return (
-          <DocumentsView
-            documents={documents}
-            patients={patients}
-            theme={theme}
-          />
-        );
-      case "Invoice Viewer":
-        return <InvoiceView invoices={invoices} theme={theme} />;
-      // This is the corrected line for Chat Management
       case "Chat Management":
         return <ChatManagementView theme={theme} user={user} />;
       case "Settings":
@@ -1840,7 +1728,4 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-// =================================================================================================
-// --- 6. EXPORT ---
-// =================================================================================================
 export default AdminDashboard;
